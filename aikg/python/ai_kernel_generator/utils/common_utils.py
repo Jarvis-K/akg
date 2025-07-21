@@ -22,7 +22,7 @@ import re
 import yaml
 from dataclasses import dataclass
 from pydantic import create_model as create_pydantic_model
-from langchain.output_parsers import PydanticOutputParser
+from ai_kernel_generator.utils.output_parser import PydanticOutputParser
 
 logger = logging.getLogger(__name__)
 

@@ -18,11 +18,10 @@ from abc import ABC
 from typing import Dict, Any
 from pathlib import Path
 
-from langchain.prompts import PromptTemplate
-
 from ai_kernel_generator import get_project_root
-from ai_kernel_generator.core.llm.model_loader import create_model
+from ai_kernel_generator.core.llm.openai_model_loader import create_openai_model
 from ai_kernel_generator.utils.common_utils import get_prompt_path
+from ai_kernel_generator.utils.prompt_template import PromptTemplate
 
 logger = logging.getLogger(__name__)
 stream_output_mode = os.getenv("STREAM_OUTPUT_MODE", "off").lower() == "on"
@@ -118,7 +117,7 @@ class AgentBase(ABC):
         return self.read_file(doc_path)
 
     async def run_llm(self, prompt: PromptTemplate, input: Dict[str, Any], model_name: str) -> tuple[str, str, str]:
-        """运行LLM
+        """运行LLM（使用OpenAI接口）
 
         Args:
             prompt: 提示模板
@@ -130,53 +129,32 @@ class AgentBase(ABC):
         """
         formatted_prompt = prompt.format(**input)
         # self.count_tokens(formatted_prompt, model_name, self.agent_name) # 暂不开启token统计
+        
         # 创建模型
-        model = create_model(model_name)
+        model = create_openai_model(model_name)
 
         try:
-            # 如果是VLLM模型（openai.AsyncOpenAI客户端）
-            if model_name.startswith("vllm_"):
-                # 将formatted_prompt转换为OpenAI格式的消息
-                messages = [
-                    {"role": "system", "content": ""},  # 空的system prompt
-                    {"role": "user", "content": formatted_prompt}
-                ]
+            # 将formatted_prompt转换为OpenAI格式的消息
+            messages = [
+                {"role": "system", "content": ""},  # 空的system prompt
+                {"role": "user", "content": formatted_prompt}
+            ]
 
-                # 直接调用OpenAI API
-                response = await model.chat.completions.create(
-                    model=model.model_name,
-                    messages=messages,
-                    temperature=model.temperature,
-                    top_p=model.top_p,
-                    stream=False
-                )
-
-                content = response.choices[0].message.content
-                reasoning_content = response.choices[0].message.reasoning_content
-
-            else:
-                # 其他模型使用原来的chain方式
-                chain = prompt | model
-
-                if not stream_output_mode:
-                    raw_result = await chain.ainvoke(input)
-                    content = raw_result.content
-                    reasoning_content = raw_result.additional_kwargs.get("reasoning_content", "")
-                else:
-                    content = ""
-                    reasoning_content = ""
-                    async for raw_result in chain.astream(input):
-                        if raw_result.content != "":
-                            print(raw_result.content, end='', flush=True)
-                            content += raw_result.content
-                        elif "reasoning_content" in raw_result.additional_kwargs:
-                            print(raw_result.additional_kwargs.get("reasoning_content"), end='', flush=True)
-                            reasoning_content += raw_result.additional_kwargs.get("reasoning_content")
-                    print()
+            # 调用模型生成
+            result = await model.generate(messages, stream=stream_output_mode)
+            
+            content = result.get('content', '')
+            reasoning_content = result.get('reasoning_content', '')
+            
+            if stream_output_mode and content:
+                print(content, flush=True)
+                if reasoning_content:
+                    print(reasoning_content, flush=True)
 
             logger.debug(f"LLM End:    [status] %s -- [model] %s", self.agent_name, model_name)
 
             return content, formatted_prompt, reasoning_content
+            
         except Exception as e:
             logger.error(f"LLM Failed: [status] %s -- [model] %s -- [error] %s", self.agent_name, model_name, e)
             return "", "", ""

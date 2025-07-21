@@ -16,11 +16,11 @@ import os
 import pytest
 from pathlib import Path
 
-from langchain.prompts import PromptTemplate
-from ai_kernel_generator.core.llm.model_loader import create_model, OLLAMA_API_BASE_ENV, VLLM_API_BASE_ENV
+from ai_kernel_generator.utils.prompt_template import PromptTemplate
+from ai_kernel_generator.core.llm.openai_model_loader import create_openai_model, OLLAMA_API_BASE_ENV, VLLM_API_BASE_ENV
 
 
-def test_verify_all_models():
+async def test_verify_all_models():
     """验证所有模型的可用性"""
     # 获取配置文件路径
     config_path = Path(__file__).parent.parent.parent / "ai_kernel_generator" / "core" / "llm" / "llm_config.yaml"
@@ -44,13 +44,11 @@ def test_verify_all_models():
     for preset in presets:
         try:
             # 创建模型
-            model = create_model(preset)
+            model = create_openai_model(preset)
 
-            # 创建链
-            chain = prompt | model
-
-            # 测试调用
-            response = chain.invoke({})
+            # 测试调用（使用OpenAI接口）
+            messages = [{"role": "user", "content": template}]
+            response = await model.generate(messages)
 
             # 如果成功，添加到工作模型列表
             working_models.append(preset)
@@ -74,7 +72,7 @@ def test_verify_all_models():
     print(f"有 {len(failed_models)} 个模型验证失败")
 
 
-def test_ollama_model_with_env():
+async def test_ollama_model_with_env():
     """测试带环境变量的Ollama模型"""
     # 保存原始环境变量
     original_env = os.environ.get(OLLAMA_API_BASE_ENV)
@@ -85,26 +83,24 @@ def test_ollama_model_with_env():
         os.environ[OLLAMA_API_BASE_ENV] = test_api_base
 
         # 创建模型
-
-        model = create_model("ollama_qwen_coder_0.5b_default")
+        model = create_openai_model("ollama_qwen_coder_0.5b_default")
 
         # 验证模型配置
-        assert model.base_url == test_api_base
+        assert model.client.base_url == test_api_base
 
         # 创建简单的提示模板并测试
         template = "你好"
-        prompt = PromptTemplate.from_template(template)
-        chain = prompt | model
-        response = chain.invoke({})
+        messages = [{"role": "user", "content": template}]
+        response = await model.generate(messages)
 
         # 验证响应
         assert response is not None
-        assert isinstance(response.content, str)
-        assert len(response.content) > 0
+        assert isinstance(response['content'], str)
+        assert len(response['content']) > 0
 
         print("\n=== Ollama环境变量测试响应 ===")
         print(f"输入: {template}")
-        print(f"输出: {response.content}")
+        print(f"输出: {response['content']}")
         print("============================")
 
         print(f"Ollama环境变量测试成功: {test_api_base}")
@@ -120,7 +116,7 @@ def test_ollama_model_with_env():
             os.environ.pop(OLLAMA_API_BASE_ENV, None)
 
 
-def test_vllm_model_with_env():
+async def test_vllm_model_with_env():
     """测试带环境变量的VLLM模型"""
     # 保存原始环境变量
     original_env = os.environ.get(VLLM_API_BASE_ENV)
@@ -131,29 +127,21 @@ def test_vllm_model_with_env():
         os.environ[VLLM_API_BASE_ENV] = test_api_base
 
         # 创建模型
-
-        model = create_model("vllm_deepseek_r1_default")
+        model = create_openai_model("vllm_deepseek_r1_default")
 
         # 创建简单的提示模板并测试
         template = "你好"
-        prompt = PromptTemplate.from_template(template)
-        chain = prompt | model
-        response = chain.invoke({})
-
-        # # 直接读取文件内容作为 prompt 字符串
-        # with open("1.txt", "r") as f:
-        #     template = f.read().strip()  # 读取并去除首尾空字符
-        # chain = model  # 直接使用模型，无需模板链
-        # response = chain.invoke(template)  # 将纯文本作为输入传递给模型
+        messages = [{"role": "user", "content": template}]
+        response = await model.generate(messages)
 
         # 验证响应
         assert response is not None
-        assert isinstance(response.content, str)
-        assert len(response.content) > 0
+        assert isinstance(response['content'], str)
+        assert len(response['content']) > 0
 
         print("\n=== VLLM环境变量测试响应 ===")
         print(f"输入: {template}")
-        print(f"输出: {response.content}")
+        print(f"输出: {response['content']}")
         print("============================")
 
         print(f"VLLM环境变量测试成功: {test_api_base}")
@@ -170,6 +158,7 @@ def test_vllm_model_with_env():
 
 
 if __name__ == "__main__":
-    test_verify_all_models()
-    test_ollama_model_with_env()
-    test_vllm_model_with_env()
+    import asyncio
+    asyncio.run(test_verify_all_models())
+    asyncio.run(test_ollama_model_with_env())
+    asyncio.run(test_vllm_model_with_env())

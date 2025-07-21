@@ -13,19 +13,19 @@
 # limitations under the License.
 
 import asyncio
-from ai_kernel_generator.core.agent.agent_base import AgentBase
+from ai_kernel_generator.core.agent.agent_base_openai import AgentBase
 from ai_kernel_generator.utils.prompt_template import PromptTemplate
 
 
 class TestAgent(AgentBase):
-    """测试用的Agent类，继承自AgentBase"""
+    """测试用的Agent类，继承自AgentBase（OpenAI版本）"""
 
     def __init__(self):
         super().__init__(agent_name="TestAgent")
 
 
 async def test_simple_run_llm():
-    """简单的VLLM测试"""
+    """简单的OpenAI接口测试"""
     # 创建测试Agent
     agent = TestAgent()
 
@@ -47,7 +47,42 @@ async def test_simple_run_llm():
     )
 
     # 输出结果
-    print(f"\n=== run_llm测试 ===")
+    print(f"\n=== OpenAI接口run_llm测试 ===")
+    print(f"Prompt: {formatted_prompt}")
+    if reasoning_content:
+        print(f"Reasoning: {reasoning_content}")
+    print(f"Model: {model_name}")
+    print(f"Output: {content}")
+    print("===================")
+
+
+async def test_template_with_variables():
+    """测试带变量的模板"""
+    # 创建测试Agent
+    agent = TestAgent()
+
+    # 带变量的prompt
+    prompt_string = "你好，我的名字是{name}，我想了解关于{topic}的信息。"
+
+    # 创建提示模板
+    prompt = PromptTemplate.from_template(prompt_string)
+
+    # 准备输入
+    input_data = {
+        "name": "小明",
+        "topic": "人工智能"
+    }
+
+    # 指定model name
+    model_name = "sflow_ds_r1_default"
+
+    # 跑run_llm
+    content, formatted_prompt, reasoning_content = await agent.run_llm(
+        prompt, input_data, model_name
+    )
+
+    # 输出结果
+    print(f"\n=== 模板变量测试 ===")
     print(f"Prompt: {formatted_prompt}")
     if reasoning_content:
         print(f"Reasoning: {reasoning_content}")
@@ -57,4 +92,6 @@ async def test_simple_run_llm():
 
 
 if __name__ == "__main__":
+    # 运行测试
     asyncio.run(test_simple_run_llm())
+    asyncio.run(test_template_with_variables())
