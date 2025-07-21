@@ -91,7 +91,42 @@ async def test_template_with_variables():
     print("===================")
 
 
+async def test_default_model():
+    """测试使用默认模型"""
+    # 创建测试Agent
+    agent = TestAgent()
+
+    # 自定义prompt string
+    prompt_string = "你好，请简单介绍一下自己"
+
+    # 创建提示模板
+    prompt = PromptTemplate.from_template(prompt_string)
+
+    # 准备输入
+    input_data = {}
+
+    print(f"\n=== 默认模型测试 ===")
+    print(f"Agent默认模型: {agent.default_model}")
+
+    try:
+        # 不指定model_name，使用默认模型
+        content, formatted_prompt, reasoning_content = await agent.run_llm(
+            prompt, input_data  # 不传model_name参数
+        )
+
+        # 输出结果
+        print(f"Prompt: {formatted_prompt}")
+        if reasoning_content:
+            print(f"Reasoning: {reasoning_content}")
+        print(f"Output: {content}")
+        print("===================")
+        
+    except Exception as e:
+        print(f"默认模型测试失败（可能是API密钥问题）: {e}")
+
+
 if __name__ == "__main__":
     # 运行测试
     asyncio.run(test_simple_run_llm())
     asyncio.run(test_template_with_variables())
+    asyncio.run(test_default_model())

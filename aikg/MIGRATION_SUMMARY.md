@@ -23,6 +23,8 @@
 - 完全使用OpenAI接口
 - 保持原有接口兼容性
 - 支持流式输出和reasoning内容
+- 自动读取llm_config中的默认模型
+- 支持环境变量优先级覆盖
 
 ✅ **更新了依赖配置** (`requirements.txt`)
 - 移除了所有langchain相关依赖
@@ -73,6 +75,42 @@
 - 支持流式输出
 - 支持reasoning内容
 - 支持环境变量覆盖
+
+## 新增功能
+
+### 1. 环境变量优先级覆盖
+
+现在支持通过环境变量动态覆盖配置文件中的参数：
+
+```bash
+# 覆盖API端点
+export AIKG_SILICONFLOW_API_BASE="https://custom-api.example.com/v1"
+
+# 覆盖模型参数
+export AIKG_TEMPERATURE="0.8"
+export AIKG_MAX_TOKENS="4096"
+```
+
+支持的环境变量：
+- **API Base**: `AIKG_DEEPSEEK_API_BASE`, `AIKG_SILICONFLOW_API_BASE`, `AIKG_HUOSHAN_API_BASE`等
+- **模型名称**: `AIKG_DEEPSEEK_MODEL`, `AIKG_SILICONFLOW_MODEL`等  
+- **通用参数**: `AIKG_TEMPERATURE`, `AIKG_MAX_TOKENS`, `AIKG_TOP_P`等
+
+### 2. Agent默认模型
+
+Agent现在会自动从`llm_config.yaml`中读取`default_preset`作为默认模型：
+
+```python
+# Agent自动使用配置文件中的default_preset
+agent = MyAgent()
+print(f"默认模型: {agent.default_model}")
+
+# 不指定模型名称时使用默认模型
+await agent.run_llm(prompt, input_data)  # 使用默认模型
+
+# 仍可以显式指定模型
+await agent.run_llm(prompt, input_data, "vllm_deepseek_r1_default")
+```
 
 ## 需要注意的事项
 
