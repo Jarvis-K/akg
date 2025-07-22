@@ -1,8 +1,4 @@
-langchain
-langchain-deepseek
-langchain-ollama
-langchain_ollama
-langchain_community
+openai
 autopep8
 jinja2
 numpy < 2 # mindspore related
@@ -14,3 +10,4 @@ pytest
 pytest-asyncio
 tiktoken
 torch
+pydantic

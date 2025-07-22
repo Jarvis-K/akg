@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import asyncio
-from langchain.prompts import PromptTemplate
 from ai_kernel_generator.core.agent.agent_base import AgentBase
+from ai_kernel_generator.utils.prompt_template import PromptTemplate
 
 
 class TestAgent(AgentBase):

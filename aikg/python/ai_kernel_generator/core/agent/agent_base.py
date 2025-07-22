@@ -13,16 +13,16 @@
 # limitations under the License.
 
 import os
+import yaml
 import logging
 from abc import ABC
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pathlib import Path
 
-from langchain.prompts import PromptTemplate
-
 from ai_kernel_generator import get_project_root
-from ai_kernel_generator.core.llm.model_loader import create_model
+from ai_kernel_generator.core.llm.openai_model_loader import create_openai_model
 from ai_kernel_generator.utils.common_utils import get_prompt_path
+from ai_kernel_generator.utils.prompt_template import PromptTemplate
 
 logger = logging.getLogger(__name__)
 stream_output_mode = os.getenv("STREAM_OUTPUT_MODE", "off").lower() == "on"
@@ -31,9 +31,29 @@ stream_output_mode = os.getenv("STREAM_OUTPUT_MODE", "off").lower() == "on"
 class AgentBase(ABC):
     """AIKG代理基类，提供基础功能和接口"""
 
-    def __init__(self, agent_name: str):
+    def __init__(self, agent_name: str, default_model: Optional[str] = None):
         self.agent_name = agent_name
         self.root_dir = get_project_root()
+        self.default_model = default_model or self._get_default_model_from_config()
+
+    def _get_default_model_from_config(self) -> str:
+        """从配置文件中获取默认模型"""
+        try:
+            config_path = Path(self.root_dir) / "python" / "ai_kernel_generator" / "core" / "llm" / "llm_config.yaml"
+            if not config_path.exists():
+                logger.warning(f"配置文件不存在: {config_path}")
+                return "sflow_ds_r1_default"  # 回退到硬编码默认值
+            
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+            
+            default_model = config.get("default_preset", "sflow_ds_r1_default")
+            logger.debug(f"从配置文件读取默认模型: {default_model}")
+            return default_model
+            
+        except Exception as e:
+            logger.warning(f"读取默认模型配置失败: {e}")
+            return "sflow_ds_r1_default"  # 回退到硬编码默认值
 
     @staticmethod
     def count_tokens(text: str, model_name: str, agent_name: str) -> None:
@@ -117,66 +137,48 @@ class AgentBase(ABC):
         doc_path = Path(self.root_dir) / "resources" / "docs" / file_path
         return self.read_file(doc_path)
 
-    async def run_llm(self, prompt: PromptTemplate, input: Dict[str, Any], model_name: str) -> tuple[str, str, str]:
-        """运行LLM
+    async def run_llm(self, prompt: PromptTemplate, input: Dict[str, Any], model_name: Optional[str] = None) -> tuple[str, str, str]:
+        """运行LLM（使用OpenAI接口）
 
         Args:
             prompt: 提示模板
             input: 输入
-            model_name: 模型名称
+            model_name: 模型名称，如果为None则使用默认模型
 
         Returns:
             tuple: (生成内容, 格式化提示词, 推理内容)
         """
+        # 使用默认模型（如果未指定）
+        model_name = model_name or self.default_model
+        
         formatted_prompt = prompt.format(**input)
         # self.count_tokens(formatted_prompt, model_name, self.agent_name) # 暂不开启token统计
+        
         # 创建模型
-        model = create_model(model_name)
+        model = create_openai_model(model_name)
 
         try:
-            # 如果是VLLM模型（openai.AsyncOpenAI客户端）
-            if model_name.startswith("vllm_"):
-                # 将formatted_prompt转换为OpenAI格式的消息
-                messages = [
-                    {"role": "system", "content": ""},  # 空的system prompt
-                    {"role": "user", "content": formatted_prompt}
-                ]
+            # 将formatted_prompt转换为OpenAI格式的消息
+            messages = [
+                {"role": "system", "content": ""},  # 空的system prompt
+                {"role": "user", "content": formatted_prompt}
+            ]
 
-                # 直接调用OpenAI API
-                response = await model.chat.completions.create(
-                    model=model.model_name,
-                    messages=messages,
-                    temperature=model.temperature,
-                    top_p=model.top_p,
-                    stream=False
-                )
-
-                content = response.choices[0].message.content
-                reasoning_content = response.choices[0].message.reasoning_content
-
-            else:
-                # 其他模型使用原来的chain方式
-                chain = prompt | model
-
-                if not stream_output_mode:
-                    raw_result = await chain.ainvoke(input)
-                    content = raw_result.content
-                    reasoning_content = raw_result.additional_kwargs.get("reasoning_content", "")
-                else:
-                    content = ""
-                    reasoning_content = ""
-                    async for raw_result in chain.astream(input):
-                        if raw_result.content != "":
-                            print(raw_result.content, end='', flush=True)
-                            content += raw_result.content
-                        elif "reasoning_content" in raw_result.additional_kwargs:
-                            print(raw_result.additional_kwargs.get("reasoning_content"), end='', flush=True)
-                            reasoning_content += raw_result.additional_kwargs.get("reasoning_content")
-                    print()
+            # 调用模型生成
+            result = await model.generate(messages, stream=stream_output_mode)
+            
+            content = result.get('content', '')
+            reasoning_content = result.get('reasoning_content', '')
+            
+            if stream_output_mode and content:
+                print(content, flush=True)
+                if reasoning_content:
+                    print(reasoning_content, flush=True)
 
             logger.debug(f"LLM End:    [status] %s -- [model] %s", self.agent_name, model_name)
 
             return content, formatted_prompt, reasoning_content
+            
         except Exception as e:
             logger.error(f"LLM Failed: [status] %s -- [model] %s -- [error] %s", self.agent_name, model_name, e)
             return "", "", ""
